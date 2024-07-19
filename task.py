@@ -5,53 +5,15 @@ import subprocess
 import shlex
 import select
 from enum import Enum
-from typing import Any, Optional, Union, Callable, IO
+from typing import Any, Optional, Callable
 
+from task_runner import SubprocessLauncher
 
-def launch_subprocess(_cmd: Union[str, list[str]], timeout: float = 60,
-                      ostreams: list[IO] = [sys.stdout], 
-                      on_verbose: Callable[[str, IO, datetime], None] = None):
-    
-    def print_internal(line, all_io, all_str, all_stamp, callback, rio):
-        now = datetime.now()
-        all_io.append(rio)
-        all_str.append(line)
-        all_stamp.append(now)
-        for stream in ostreams:
-            stream.write(line)
-        if callback:
-            callback(line, rio, now)
-    
-    if isinstance(_cmd, str):
-        cmd = shlex.split(_cmd)
-    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    all_strs, all_ios, all_stamps = [], [], []
-
-    while True:
-        selected = select.select([process.stdout, process.stderr], [], [])[0]
-        for rio in selected:
-            line = rio.readline()
-            if not line:
-                continue
-            print_internal(line, all_ios, all_strs, all_stamps, on_verbose, rio)
-        if process.poll() is not None:
-            break
-
-    # Process remaining output after the process has finished
-    for line in process.stdout:
-        print_internal(line, all_ios, all_strs, all_stamps, on_verbose, rio)    
-    for line in process.stderr:
-        print_internal(line, all_ios, all_strs, all_stamps, on_verbose, rio)
-
-    process.stdout.close()
-    process.stderr.close()
-    process.wait()
-    return all_strs, all_ios, all_stamps
-    
 
 class MultiRange:
-    def __init__(self, ranges: list[int]):
+    def __init__(self, ranges: list[int], on_return: Callable[[int], Any]=None):
         self.iterations = []
+        self.on_return = on_return
         for v in ranges:
             self.iterations.append(v)
 
@@ -70,27 +32,29 @@ class MultiRange:
                 self.multi_index[i] = temp % self.iterations[i]
                 temp //= self.iterations[i]
             self.iter_index += 1
+            if self.on_return is not None:
+                return self.on_return(self.multi_index)
             return self.multi_index
         else:
             raise StopIteration()
-        
-    def status(self):
-        return self.iter_index, self.multi_index
+    
+    def total(self):
+        return self.total_iters
 
 
 class Loopable:
     
     class FakeKey(Enum):
-        FIXED = "__loopable_internal_fixed_nokey_argmt"
-        POSIT = "__loopable_internal_positional_argmt"
-        swich = "__loopable_internal_swich_argmt"
+        FIXED = "__loopable_internal_fixed_nokey_arg"
+        POSIT = "__loopable_internal_positional_arg"
+        SWITCH = "__loopable_internal_switch_arg"
     
     def __init__(self):
         self.kv: dict[str, list] = {}
-        self._nokey_argmt_count = {
+        self._nokey_arg_count = {
             self.FakeKey.FIXED: 0,
             self.FakeKey.POSIT: 0,
-            self.FakeKey.swich: 0
+            self.FakeKey.SWITCH: 0
         }
 
     def fixed(self, key: Optional[str], value: str):
@@ -101,7 +65,7 @@ class Loopable:
         self.kv[key] = [value]
         return self
 
-    def argmt(self, key: Optional[str], values: list[Any]):
+    def arg(self, key: Optional[str], values: list[Any]):
         if key is None:
             key = self._create_fake_key(self.FakeKey.POSIT)
         if not isinstance(values, list):
@@ -109,52 +73,71 @@ class Loopable:
         self.kv[key] = [str(v) for v in values]
         return self
     
-    def swich(self, value: str):
+    def switch(self, value: str):
         if not isinstance(value, str):
             raise TypeError(f"value {value} should be str")
-        key = self._create_fake_key(self.FakeKey.swich)
-        return self.argmt(key, [value, ""])
+        key = self._create_fake_key(self.FakeKey.SWITCH)
+        return self.arg(key, [value, ""])
     
     def index_loop(self):
         return MultiRange([len(x) for x in self.kv.values()])
     
+    def cmd_loop(self):
+        return MultiRange([len(x) for x in self.kv.values()], lambda idx: self.command_list(idx))
+    
+    def cmd_kv_loop(self):
+        return MultiRange([len(x) for x in self.kv.values()], lambda idx: self.raw_command_dict(idx))
+    
+    def now(self, multi_index):
+        curid = 0
+        dims = [len(v) for v in self.kv.values()]
+        acc_dim = 1
+        for i in range(len(dims) - 1, -1, -1):
+            curid += multi_index[i] * acc_dim
+            acc_dim *= dims[i]
+        return curid
+    
     def execute(self):
         loop = self.index_loop()
         for kv_indices in loop:
-            prompt_list = self._create_prompt_list(kv_indices)
-            print(loop.status(), prompt_list)
+            command_list = self.command_list(kv_indices)
+            print(self.now(kv_indices), command_list)
 
     def _create_fake_key(self, keytype):
-        key = f"{keytype}_{self._nokey_argmt_count[keytype]}"
-        self._nokey_argmt_count[keytype] += 1
+        key = f"{keytype}_{self._nokey_arg_count[keytype]}"
+        self._nokey_arg_count[keytype] += 1
         return key
     
-    def _create_raw_prompt_dict(self, kv_indices):
+    def raw_command_dict(self, kv_indices):
         result: dict[str, str] = {}
         for i, (key, vlist) in enumerate(self.kv.items()):
             result[key] = vlist[kv_indices[i]]
         return result
     
-    def _create_prompt_list(self, kv_indices):
-        prompt_dict = self._create_raw_prompt_dict(kv_indices)
-        prompt_list = []
-        for key, value in prompt_dict.items():
+    def command_list(self, kv_indices):
+        command_dict = self.raw_command_dict(kv_indices)
+        command_list = []
+        for key, value in command_dict.items():
             if "FakeKey" in key:
-                prompt_list.append(value)
+                command_list.append(value)
             else:
-                prompt_list.extend([key, value])
-        return prompt_list
+                command_list.extend([key, value])
+        return command_list
 
 
 task = Loopable()
 task.fixed("--backend", "vllm")
 task.fixed(None, "f1")
 task.fixed(None, "f2")
-task.argmt("--requests", [16, 32, 64])
-task.argmt("--tpcs", [54, 40, 30, 1])
-task.argmt(None, ['a', 'b'])
-task.argmt(None, ['x', 'y'])
-task.swich("--enable-smctrl")
+task.arg("--requests", [16, 32, 64])
+task.arg("--tpcs", [54, 40, 30, 1])
+task.arg(None, ['a', 'b'])
+task.arg(None, ['x', 'y'])
+task.switch("--enable-smctrl")
 task.execute()
 
-launch_subprocess("python ./runner_test.py")
+# for cmd in task.cmd_loop():
+    # print(cmd)
+
+launcher = SubprocessLauncher("python ./runner_test.py")
+launcher.run()
