@@ -7,7 +7,7 @@ import select
 from typing import Union, Callable, IO, List
 from functools import wraps
 
-from safe_context import catch_all
+from .safe_context import catch_all
 
 
 class SubprocessRunner:

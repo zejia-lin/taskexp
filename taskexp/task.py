@@ -8,8 +8,8 @@ from enum import Enum
 from typing import Any, Optional, Callable, IO, Union, Literal
 import traceback
 
-from safe_context import catch_all
-from subprocess_runner import SubprocessRunner
+from .safe_context import catch_all
+from .subprocess_runner import SubprocessRunner
 
 
 def index_1d(now: list[int], dims: list[int]):
@@ -37,7 +37,7 @@ def create_log_fd(exp_name, basedir, prefix='', timefmt="%Y-%m-%d_%H:%M:%S", suf
     if not os.path.exists(basedir):
         traceback.print_stack()
         print(f"Log base dir '{basedir}' does not exist. Aborting...")
-        os.exit(1)
+        os._exit(1)
     if not os.path.exists(dirname):
         os.mkdir(dirname)
     filename = os.path.join(dirname, f"{prefix}{now_str}{suffix}")
