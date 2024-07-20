@@ -37,6 +37,7 @@ class SubprocessRunner:
         self.all_stamps.append(now)
         for stream in self.ostreams:
             stream.write(line)
+            stream.flush()
         if self.on_verbose:
             self.on_verbose(line, rio, now)
 

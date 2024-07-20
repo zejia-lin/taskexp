@@ -1,5 +1,6 @@
 import sys
 import os
+import inspect
 import shlex
 from datetime import datetime
 from copy import deepcopy
@@ -41,7 +42,12 @@ def create_log_fd(exp_name, basedir, prefix='', timefmt="%Y-%m-%d_%H:%M:%S", suf
     if not os.path.exists(dirname):
         os.mkdir(dirname)
     filename = os.path.join(dirname, f"{prefix}{now_str}{suffix}")
-    return open(filename, "w+")
+    caller_file = os.path.abspath(inspect.getfile(inspect.currentframe().f_back))
+    fout = open(filename, "w+")
+    with open(caller_file, 'r+') as fin:
+        fout.writelines(fin.readlines())
+    fout.write("\n\n")
+    return fout
 
 
 class MultiRange:
@@ -129,7 +135,7 @@ class TaskIterator:
             self.pbar = tqdm(total=product(self.that.index_dims()), dynamic_ncols=True)
         return self
 
-    def __next__(self):
+    def __next__(self) -> TaskExecutable:
         while idx := next(self.loop):
             cmd = self.that.arg_list(idx)
             cmd_dict = self.that.arg_dict(idx)
@@ -157,9 +163,9 @@ class Task:
     def fixed(self, key: Optional[str], value: str):
         if key is None:
             key = self._create_fake_key(self.FakeKey.FIXED)
-        if not isinstance(value, str):
+        if not isinstance(value, (str, int, float, bool)):
             raise TypeError(f"value {value} should be str")
-        self.kv[key] = [value]
+        self.kv[key] = [str(value)]
         return self
 
     def arg(self, key: Optional[str], values: list[Any]):

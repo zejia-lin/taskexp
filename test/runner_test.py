@@ -9,8 +9,8 @@ task.arg("--requests", [16, 32, 64])
 task.arg("--tpcs", [54, 40, 30, 1])
 task.arg(None, ['a', 'b'])
 task.arg(None, ['x', 'y'])
-task.switch("--enable-smctrl")
-logfile = create_log_fd("test_logger", "/home/lzj/work/llm-infer/AMotivation/taskexp/build")
+task.switch("--enable")
+logfile = create_log_fd("test_logger", "../build")
 
 
 for t in task.executable_loop(False):
