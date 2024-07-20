@@ -1,4 +1,6 @@
 
+import shlex
+import subprocess
 from taskexp import Task, create_log_fd
 
 # Intialized the test
@@ -19,10 +21,8 @@ for task in exp.executable_loop():
     # task.execute(ostreams=[logfile])
     logfile.flush()
     task.update_tqdm()
-    
 
-import subprocess
-import shlex
+
 for num_prompts in [64, 128, 256]:
     for input_len in [128, 256, 512]:
         for output_len in [512, 1024]:
@@ -36,8 +36,10 @@ for num_prompts in [64, 128, 256]:
                             {enable_mytool}
                 """
                 try:
-                    output = subprocess.check_output(shlex.split(cmd), universal_newlines=True)
-                    logfile = create_log_fd("throughtput_test", "./build/test_vllm")
+                    output = subprocess.check_output(
+                        shlex.split(cmd), universal_newlines=True)
+                    logfile = create_log_fd(
+                        "throughtput_test", "./build/test_vllm")
                     print(output, file=logfile, flush=True)
                 except Exception as e:
                     pass

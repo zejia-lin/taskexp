@@ -6,9 +6,12 @@ import os
 
 # print(os.environ["LD_LIBRARY_PATH"])
 
-pbar = tqdm(total=20, dynamic_ncols=True)
+# print(sys.argv)
 
-for i in range(20):
-    pbar.update(1)
-    time.sleep(0.01)
+# pbar = tqdm(total=20, dynamic_ncols=True)
+
+# for i in range(20):
+#     pbar.update(1)
+#     print("asdfasfsdf asdfdsf ")
+#     time.sleep(0.01)
 

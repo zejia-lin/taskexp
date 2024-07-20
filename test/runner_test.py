@@ -14,6 +14,10 @@ logfile = create_log_fd("test_logger", "/home/lzj/work/llm-infer/AMotivation/tas
 
 
 for t in task.executable_loop():
-    t.execute(ostreams=[logfile])
+    pass
+    # t.execute(ostreams=[logfile])
+    # t.print_cmd(ostreams=[logfile])
+    # t.print_duration(ostreams=[logfile])
+    # t.print_status(ostreams=[logfile])
     # logfile.flush()
-    t.update_tqdm()
+    # t.update_tqdm()
