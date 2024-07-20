@@ -13,6 +13,7 @@ from subprocess_runner import SubprocessRunner
 
 
 def index_1d(now: list[int], dims: list[int]):
+    """plain 1d index"""
     curid = 0
     acc_dim = 1
     for i in range(len(dims) - 1, -1, -1):
@@ -22,6 +23,7 @@ def index_1d(now: list[int], dims: list[int]):
 
 
 def product(total: list[int]):
+    """product of array"""
     tot = 1
     for dim in total:
         tot *= dim
@@ -56,9 +58,6 @@ class MultiRange:
             return self.multi_index
         else:
             raise StopIteration()
-    
-    def total(self):
-        return self.total_iters
 
 
 class TaskExecutable:

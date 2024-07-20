@@ -4,7 +4,7 @@ import signal
 import sys
 import os
 
-# print(os.environ["LD_LIBRARY_PATH"])
+print(os.environ["LD_LIBRARY_PATH"])
 
 pbar = tqdm(total=80, dynamic_ncols=True)
 
