@@ -6,29 +6,8 @@ import shlex
 import select
 from typing import Union, Callable, IO, List
 from functools import wraps
-import traceback
 
-
-def catch_except(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except Exception as e:
-            print(f"Exception occurred: {e}")
-            print(traceback.format_exc())
-        except KeyboardInterrupt:
-            while True:
-                user_input = input(" Do you really want to exit (yes/no)? ")
-                if user_input.lower() == "yes":
-                    sys.exit(0)
-                elif user_input.lower() == "no":
-                    print("Continuing execution...")
-                    return func(*args, **kwargs)
-                else:
-                    print("Invalid input. Please enter 'y' or 'n'.")
-    return wrapper
-
+from safe_context import catch_all
 
 
 class SubprocessRunner:
@@ -50,7 +29,7 @@ class SubprocessRunner:
         self.all_ios: List[IO] = []
         self.all_stamps: List[datetime] = []
 
-    @catch_except
+    @catch_all
     def _print_internal(self, line: str, rio: IO) -> None:
         now = datetime.now()
         self.all_ios.append(rio)
@@ -61,7 +40,7 @@ class SubprocessRunner:
         if self.on_verbose:
             self.on_verbose(line, rio, now)
 
-    @catch_except
+    @catch_all
     def run(self):
         process = subprocess.Popen(self.cmd, env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 

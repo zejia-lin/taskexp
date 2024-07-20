@@ -1,13 +1,15 @@
-from datetime import datetime
 import sys
 import os
 import shlex
-from enum import Enum
-from typing import Any, Optional, Callable, IO
-from tqdm import tqdm
+from datetime import datetime
 from copy import deepcopy
+from tqdm import tqdm
+from enum import Enum
+from typing import Any, Optional, Callable, IO, Union, Literal
+import traceback
 
-from task_runner import SubprocessRunner
+from safe_context import catch_all
+from subprocess_runner import SubprocessRunner
 
 
 def index_1d(now: list[int], dims: list[int]):
@@ -65,18 +67,21 @@ class TaskExecutable:
         self.arg_list = arg_list
         self.env = env
         self.arg_dict = arg_dict
-        self.multi_index = multi_index
-        self.total_index = total_index
+        self.current_mulid = multi_index
+        self.total_mulid = total_index
         self.pbar = pbar
         self.runner = None
         self.start_time = None
         self.end_time = None
     
+    @catch_all
     def execute(self, timeout: float = 300,  ostreams: list[IO] = [sys.stdout], 
                 on_verbose: Callable[[str, IO, datetime], None] = None):
         self.runner = SubprocessRunner(cmd=self.arg_list, timeout=timeout, ostreams=ostreams,
                                       env=self.env, on_verbose=on_verbose)
-        self.start_time, self.end_time = self.runner.run()
+        self.start_time = datetime.now()
+        self.runner.run()
+        self.end_time = datetime.now()
     
     def print_cmd(self, ostreams: list[IO] = [sys.stdout]):
         for fout in ostreams:
@@ -87,10 +92,10 @@ class TaskExecutable:
             self.pbar.update()
     
     def print_status(self, ostreams: list[IO] = [sys.stdout]):
-        if self.multi_index and self.total_index:
-            index = index_1d(self.multi_index, self.total_index)
-            total = product(self.total_index)
-            info = f"{index} / {total}, {self.multi_index} / {self.total_index}"
+        if self.current_mulid and self.total_mulid:
+            index = index_1d(self.current_mulid, self.total_mulid)
+            total = product(self.total_mulid)
+            info = f"{index} / {total}, {self.current_mulid} / {self.total_mulid}"
             for fout in ostreams:
                 print(info, file=fout)
     
@@ -202,36 +207,19 @@ class Experiement:
         return command_list
 
 
-class TaskLogger:
-    def __init__(self, verbose = True, basedir: str = None, prefix: str = None, 
-                 timefmt="%Y-%m-%d_%H:%M:%S", suffix: str = '.log'):
-        self.verbose = verbose
-        if basedir is not None:
-            self.basedir = basedir
-            self.prefix = prefix
-            self.timefmt = timefmt
-            self.suffix = suffix
-            self.now = datetime.now()
-            self.now_str = self.now.strftime(timefmt)
-            self.filename = os.path.join(basedir, f"{prefix}{self.now_str}{suffix}")
-            self.fd = open(self.filename, "w+")
+def create_log_fd(exp_name, basedir, prefix='', timefmt="%Y-%m-%d_%H:%M:%S", suffix=".log"):
+    now = datetime.now()
+    now_str = now.strftime(timefmt)
+    dirname = os.path.join(basedir, exp_name)
+    if not os.path.exists(basedir):
+        traceback.print_stack()
+        print(f"Log base dir '{basedir}' does not exist. Aborting...")
+        os.exit(1)
+    if not os.path.exists(dirname):
+        os.mkdir(dirname)
+    filename = os.path.join(dirname, f"{prefix}{now_str}{suffix}")
+    return open(filename, "w+")
 
-    def write(self, msg: str, flush=False):
-        if self.verbose:
-            print(msg, end='', flush=flush)
-        self.fd.write(msg)
-    
-    def close(self):
-        if self.fd is not None:
-            self.fd.close()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.close()
-
-            
 
 task = Experiement("python ./runner_test.py")
 task.fixed("--backend", "vllm")
@@ -242,15 +230,9 @@ task.arg("--tpcs", [54, 40, 30, 1])
 task.arg(None, ['a', 'b'])
 task.arg(None, ['x', 'y'])
 task.switch("--enable-smctrl")
-# task.execute()
-# print(task.total())
-
-for idx in task.index_loop():
-    print(task.index_1d(idx), task.arg_list(idx))
-    # TaskExecutable(task.arg_list(idx)).execute()
+logfile = create_log_fd("test_logger", "/home/lzj/work/llm-infer/AMotivation/taskify/build")
 
 for t in task.executable_loop():
-    # print(t)
-    # t.print_cmd()
+    t.execute(ostreams=[logfile])
+    logfile.flush()
     t.update_tqdm()
-    t.execute()
