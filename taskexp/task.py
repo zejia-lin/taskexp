@@ -28,7 +28,20 @@ def product(total: list[int]):
     for dim in total:
         tot *= dim
     return tot
-        
+
+
+def create_log_fd(exp_name, basedir, prefix='', timefmt="%Y-%m-%d_%H:%M:%S", suffix=".log"):
+    now = datetime.now()
+    now_str = now.strftime(timefmt)
+    dirname = os.path.join(basedir, exp_name)
+    if not os.path.exists(basedir):
+        traceback.print_stack()
+        print(f"Log base dir '{basedir}' does not exist. Aborting...")
+        os.exit(1)
+    if not os.path.exists(dirname):
+        os.mkdir(dirname)
+    filename = os.path.join(dirname, f"{prefix}{now_str}{suffix}")
+    return open(filename, "w+")
 
 
 class MultiRange:
@@ -115,14 +128,14 @@ class TaskIterator:
 
     def __next__(self):
         while idx := next(self.loop):
-            cmd = task.arg_list(idx)
-            cmd_dict = task.arg_dict(idx)
+            cmd = self.that.arg_list(idx)
+            cmd_dict = self.that.arg_dict(idx)
             return TaskExecutable(cmd, self.env, cmd_dict, idx, self.that.index_dims(), self.pbar)
         self.pbar.close()
         raise StopIteration()
 
 
-class Experiement:
+class Task:
     
     class FakeKey(Enum):
         FIXED = "__loopable_internal_fixed_nokey_arg"
@@ -205,33 +218,3 @@ class Experiement:
                 command_list.extend([key, value])
         return command_list
 
-
-def create_log_fd(exp_name, basedir, prefix='', timefmt="%Y-%m-%d_%H:%M:%S", suffix=".log"):
-    now = datetime.now()
-    now_str = now.strftime(timefmt)
-    dirname = os.path.join(basedir, exp_name)
-    if not os.path.exists(basedir):
-        traceback.print_stack()
-        print(f"Log base dir '{basedir}' does not exist. Aborting...")
-        os.exit(1)
-    if not os.path.exists(dirname):
-        os.mkdir(dirname)
-    filename = os.path.join(dirname, f"{prefix}{now_str}{suffix}")
-    return open(filename, "w+")
-
-
-task = Experiement("python ./runner_test.py")
-task.fixed("--backend", "vllm")
-task.fixed(None, "f1")
-task.fixed(None, "f2")
-task.arg("--requests", [16, 32, 64])
-task.arg("--tpcs", [54, 40, 30, 1])
-task.arg(None, ['a', 'b'])
-task.arg(None, ['x', 'y'])
-task.switch("--enable-smctrl")
-logfile = create_log_fd("test_logger", "/home/lzj/work/llm-infer/AMotivation/taskify/build")
-
-for t in task.executable_loop():
-    t.execute(ostreams=[logfile])
-    logfile.flush()
-    t.update_tqdm()
