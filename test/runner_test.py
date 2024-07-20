@@ -13,9 +13,9 @@ task.switch("--enable-smctrl")
 logfile = create_log_fd("test_logger", "/home/lzj/work/llm-infer/AMotivation/taskexp/build")
 
 
-for t in task.executable_loop():
-    pass
-    # t.execute(ostreams=[logfile])
+for t in task.executable_loop(False):
+    # pass
+    t.execute(ostreams=[logfile])
     # t.print_cmd(ostreams=[logfile])
     # t.print_duration(ostreams=[logfile])
     # t.print_status(ostreams=[logfile])

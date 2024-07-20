@@ -113,17 +113,20 @@ class TaskExecutable:
     
     def print_duration(self, ostreams: list[IO] = [sys.stdout]):
         for fout in ostreams:
-            print(self.end_time - self.start_time, fout=fout)
+            print(self.end_time - self.start_time, file=fout)
 
 
 class TaskIterator:
-    def __init__(self, that, env: dict[str, str] = None):
+    def __init__(self, that, use_tqdm: bool, env: dict[str, str] = None):
         self.that = that
         self.env = env
+        self.use_tqdm = use_tqdm
     
     def __iter__(self):
         self.loop = iter(self.that.index_loop())
-        self.pbar = tqdm(total=product(self.that.index_dims()), dynamic_ncols=True)
+        self.pbar = None
+        if self.use_tqdm:
+            self.pbar = tqdm(total=product(self.that.index_dims()), dynamic_ncols=True)
         return self
 
     def __next__(self):
@@ -182,8 +185,8 @@ class Task:
     def cmd_kv_loop(self):
         return MultiRange(self.index_dims(), lambda idx: self.arg_dict(idx))
     
-    def executable_loop(self, env: dict[str, str] = None):
-        return TaskIterator(self, env)
+    def executable_loop(self, use_tqdm: bool, env: dict[str, str] = None):
+        return TaskIterator(self, use_tqdm, env)
     
     def index_1d(self, multi_index):
         return index_1d(multi_index, self.index_dims())
