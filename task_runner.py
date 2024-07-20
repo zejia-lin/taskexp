@@ -5,10 +5,33 @@ import subprocess
 import shlex
 import select
 from typing import Union, Callable, IO, List
+from functools import wraps
+import traceback
+
+
+def catch_except(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            print(f"Exception occurred: {e}")
+            print(traceback.format_exc())
+        except KeyboardInterrupt:
+            while True:
+                user_input = input(" Do you really want to exit (yes/no)? ")
+                if user_input.lower() == "yes":
+                    sys.exit(0)
+                elif user_input.lower() == "no":
+                    print("Continuing execution...")
+                    return func(*args, **kwargs)
+                else:
+                    print("Invalid input. Please enter 'y' or 'n'.")
+    return wrapper
 
 
 
-class SubprocessLauncher:
+class SubprocessRunner:
     def __init__(self, 
                  cmd: Union[str, List[str]], 
                  timeout: float = 300, 
@@ -16,6 +39,8 @@ class SubprocessLauncher:
                  env: dict[str, str] = None,
                  on_verbose: Callable[[str, IO, datetime], None] = None):
         self.cmd = cmd
+        if isinstance(cmd, str):
+            self.cmd = shlex.split(cmd)
         self.timeout = timeout
         self.ostreams = ostreams
         self.env = env
@@ -25,6 +50,7 @@ class SubprocessLauncher:
         self.all_ios: List[IO] = []
         self.all_stamps: List[datetime] = []
 
+    @catch_except
     def _print_internal(self, line: str, rio: IO) -> None:
         now = datetime.now()
         self.all_ios.append(rio)
@@ -35,10 +61,9 @@ class SubprocessLauncher:
         if self.on_verbose:
             self.on_verbose(line, rio, now)
 
+    @catch_except
     def run(self):
-        if isinstance(self.cmd, str):
-            cmd = shlex.split(self.cmd)
-        process = subprocess.Popen(cmd, env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        process = subprocess.Popen(self.cmd, env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
         start_time = datetime.now()
         last_output = datetime.now()

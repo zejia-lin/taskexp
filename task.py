@@ -1,13 +1,30 @@
 from datetime import datetime
 import sys
 import os
-import subprocess
 import shlex
-import select
 from enum import Enum
-from typing import Any, Optional, Callable
+from typing import Any, Optional, Callable, IO
+from tqdm import tqdm
+from copy import deepcopy
 
-from task_runner import SubprocessLauncher
+from task_runner import SubprocessRunner
+
+
+def index_1d(now: list[int], dims: list[int]):
+    curid = 0
+    acc_dim = 1
+    for i in range(len(dims) - 1, -1, -1):
+        curid += now[i] * acc_dim
+        acc_dim *= dims[i]
+    return curid
+
+
+def product(total: list[int]):
+    tot = 1
+    for dim in total:
+        tot *= dim
+    return tot
+        
 
 
 class MultiRange:
@@ -42,15 +59,75 @@ class MultiRange:
         return self.total_iters
 
 
-class Loopable:
+class TaskExecutable:
+    def __init__(self, arg_list: list[str], env: dict[str, str] = None, arg_dict: dict[str, str] = None,
+                 multi_index: list[int] = None, total_index: list[int] = None, pbar: tqdm = None):
+        self.arg_list = arg_list
+        self.env = env
+        self.arg_dict = arg_dict
+        self.multi_index = multi_index
+        self.total_index = total_index
+        self.pbar = pbar
+        self.runner = None
+        self.start_time = None
+        self.end_time = None
+    
+    def execute(self, timeout: float = 300,  ostreams: list[IO] = [sys.stdout], 
+                on_verbose: Callable[[str, IO, datetime], None] = None):
+        self.runner = SubprocessRunner(cmd=self.arg_list, timeout=timeout, ostreams=ostreams,
+                                      env=self.env, on_verbose=on_verbose)
+        self.start_time, self.end_time = self.runner.run()
+    
+    def print_cmd(self, ostreams: list[IO] = [sys.stdout]):
+        for fout in ostreams:
+            print(' '.join(self.arg_list), file=fout)
+
+    def update_tqdm(self):
+        if self.pbar:
+            self.pbar.update()
+    
+    def print_status(self, ostreams: list[IO] = [sys.stdout]):
+        if self.multi_index and self.total_index:
+            index = index_1d(self.multi_index, self.total_index)
+            total = product(self.total_index)
+            info = f"{index} / {total}, {self.multi_index} / {self.total_index}"
+            for fout in ostreams:
+                print(info, file=fout)
+    
+    def print_duration(self, ostreams: list[IO] = [sys.stdout]):
+        for fout in ostreams:
+            print(self.end_time - self.start_time, fout=fout)
+
+
+class TaskIterator:
+    def __init__(self, that, env: dict[str, str] = None):
+        self.that = that
+        self.env = env
+    
+    def __iter__(self):
+        self.loop = iter(self.that.index_loop())
+        self.pbar = tqdm(total=product(self.that.index_dims()), dynamic_ncols=True)
+        return self
+
+    def __next__(self):
+        while idx := next(self.loop):
+            cmd = task.arg_list(idx)
+            cmd_dict = task.arg_dict(idx)
+            return TaskExecutable(cmd, self.env, cmd_dict, idx, self.that.index_dims(), self.pbar)
+        self.pbar.close()
+        raise StopIteration()
+
+
+class Experiement:
     
     class FakeKey(Enum):
         FIXED = "__loopable_internal_fixed_nokey_arg"
         POSIT = "__loopable_internal_positional_arg"
         SWITCH = "__loopable_internal_switch_arg"
     
-    def __init__(self):
+    def __init__(self, program = None):
         self.kv: dict[str, list] = {}
+        self.program = program and shlex.split(program)
         self._nokey_arg_count = {
             self.FakeKey.FIXED: 0,
             self.FakeKey.POSIT: 0,
@@ -80,43 +157,43 @@ class Loopable:
         return self.arg(key, [value, ""])
     
     def index_loop(self):
-        return MultiRange([len(x) for x in self.kv.values()])
+        return MultiRange(self.index_dims())
     
     def cmd_loop(self):
-        return MultiRange([len(x) for x in self.kv.values()], lambda idx: self.command_list(idx))
+        return MultiRange(self.index_dims(), lambda idx: self.arg_list(idx))
     
     def cmd_kv_loop(self):
-        return MultiRange([len(x) for x in self.kv.values()], lambda idx: self.raw_command_dict(idx))
+        return MultiRange(self.index_dims(), lambda idx: self.arg_dict(idx))
     
-    def now(self, multi_index):
-        curid = 0
-        dims = [len(v) for v in self.kv.values()]
-        acc_dim = 1
-        for i in range(len(dims) - 1, -1, -1):
-            curid += multi_index[i] * acc_dim
-            acc_dim *= dims[i]
-        return curid
+    def executable_loop(self, env: dict[str, str] = None):
+        return TaskIterator(self, env)
     
-    def execute(self):
-        loop = self.index_loop()
-        for kv_indices in loop:
-            command_list = self.command_list(kv_indices)
-            print(self.now(kv_indices), command_list)
+    def index_1d(self, multi_index):
+        return index_1d(multi_index, self.index_dims())
+    
+    def index_dims(self):
+        return [len(v) for v in self.kv.values()]
+    
+    def __len__(self):
+        return product([len(v) for v in self.kv.values()])
 
     def _create_fake_key(self, keytype):
         key = f"{keytype}_{self._nokey_arg_count[keytype]}"
         self._nokey_arg_count[keytype] += 1
         return key
     
-    def raw_command_dict(self, kv_indices):
+    def arg_dict(self, kv_indices):
         result: dict[str, str] = {}
         for i, (key, vlist) in enumerate(self.kv.items()):
             result[key] = vlist[kv_indices[i]]
         return result
     
-    def command_list(self, kv_indices):
-        command_dict = self.raw_command_dict(kv_indices)
-        command_list = []
+    def arg_list(self, kv_indices):
+        command_dict = self.arg_dict(kv_indices)
+        if self.program is not None:
+            command_list = deepcopy(self.program)
+        else:
+            command_list = []
         for key, value in command_dict.items():
             if "FakeKey" in key:
                 command_list.append(value)
@@ -125,7 +202,38 @@ class Loopable:
         return command_list
 
 
-task = Loopable()
+class TaskLogger:
+    def __init__(self, verbose = True, basedir: str = None, prefix: str = None, 
+                 timefmt="%Y-%m-%d_%H:%M:%S", suffix: str = '.log'):
+        self.verbose = verbose
+        if basedir is not None:
+            self.basedir = basedir
+            self.prefix = prefix
+            self.timefmt = timefmt
+            self.suffix = suffix
+            self.now = datetime.now()
+            self.now_str = self.now.strftime(timefmt)
+            self.filename = os.path.join(basedir, f"{prefix}{self.now_str}{suffix}")
+            self.fd = open(self.filename, "w+")
+
+    def write(self, msg: str, flush=False):
+        if self.verbose:
+            print(msg, end='', flush=flush)
+        self.fd.write(msg)
+    
+    def close(self):
+        if self.fd is not None:
+            self.fd.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+
+            
+
+task = Experiement("python ./runner_test.py")
 task.fixed("--backend", "vllm")
 task.fixed(None, "f1")
 task.fixed(None, "f2")
@@ -134,10 +242,15 @@ task.arg("--tpcs", [54, 40, 30, 1])
 task.arg(None, ['a', 'b'])
 task.arg(None, ['x', 'y'])
 task.switch("--enable-smctrl")
-task.execute()
+# task.execute()
+# print(task.total())
 
-# for cmd in task.cmd_loop():
-    # print(cmd)
+for idx in task.index_loop():
+    print(task.index_1d(idx), task.arg_list(idx))
+    # TaskExecutable(task.arg_list(idx)).execute()
 
-launcher = SubprocessLauncher("python ./runner_test.py")
-launcher.run()
+for t in task.executable_loop():
+    # print(t)
+    # t.print_cmd()
+    t.update_tqdm()
+    t.execute()
