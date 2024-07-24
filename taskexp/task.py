@@ -51,7 +51,7 @@ def create_log_fd(exp_name, basedir, prefix='', timefmt="%Y-%m-%d_%H:%M:%S", suf
 
 
 class MultiRange:
-    def __init__(self, ranges: list[int], on_return: Callable[[int], Any]=None, start=0):
+    def __init__(self, ranges: list[int], start=0, on_return: Callable[[int], Any]=None):
         self.iterations = []
         self.on_return = on_return
         self.start = start
@@ -190,13 +190,13 @@ class Task:
         return self.arg(key, [value, ""])
     
     def index_loop(self, start = 0):
-        return MultiRange(self.index_dims(), start=start)
+        return MultiRange(self.index_dims(), start)
     
     def cmd_loop(self, start = 0):
-        return MultiRange(self.index_dims(), lambda idx: self.arg_list(idx), start)
+        return MultiRange(self.index_dims(), start, lambda idx: self.arg_list(idx))
     
     def cmd_kv_loop(self, start = 0):
-        return MultiRange(self.index_dims(), lambda idx: self.arg_dict(idx), start)
+        return MultiRange(self.index_dims(), start, lambda idx: self.arg_dict(idx))
     
     def executable_loop(self, start = 0, use_tqdm = True, env: dict[str, str] = None):
         return TaskIterator(self, use_tqdm, start, env)
