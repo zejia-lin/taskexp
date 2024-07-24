@@ -51,14 +51,15 @@ def create_log_fd(exp_name, basedir, prefix='', timefmt="%Y-%m-%d_%H:%M:%S", suf
 
 
 class MultiRange:
-    def __init__(self, ranges: list[int], on_return: Callable[[int], Any]=None):
+    def __init__(self, ranges: list[int], on_return: Callable[[int], Any]=None, start=0):
         self.iterations = []
         self.on_return = on_return
+        self.start = start
         for v in ranges:
             self.iterations.append(v)
 
     def __iter__(self):
-        self.iter_index = 0
+        self.iter_index = self.start
         self.total_iters = 1
         self.multi_index = [0] * len(self.iterations)
         for i in self.iterations:
@@ -101,14 +102,17 @@ class TaskExecutable:
         self.runner.run()
         self.end_time = datetime.now()
     
+    @catch_all
     def print_cmd(self, ostreams: list[IO] = [sys.stdout]):
         for fout in ostreams:
             print(' '.join(self.arg_list), file=fout)
 
+    @catch_all
     def update_tqdm(self):
         if self.pbar:
             self.pbar.update()
     
+    @catch_all
     def print_status(self, ostreams: list[IO] = [sys.stdout]):
         if self.current_mulid and self.total_mulid:
             index = index_1d(self.current_mulid, self.total_mulid)
@@ -117,22 +121,25 @@ class TaskExecutable:
             for fout in ostreams:
                 print(info, file=fout)
     
+    @catch_all
     def print_duration(self, ostreams: list[IO] = [sys.stdout]):
         for fout in ostreams:
             print(self.end_time - self.start_time, file=fout)
 
 
 class TaskIterator:
-    def __init__(self, that, use_tqdm: bool, env: dict[str, str] = None):
+    def __init__(self, that, use_tqdm: bool, start = 0, env: dict[str, str] = None):
         self.that = that
+        self.start  = start
         self.env = env
         self.use_tqdm = use_tqdm
     
     def __iter__(self):
-        self.loop = iter(self.that.index_loop())
+        self.loop = iter(self.that.index_loop(self.start))
         self.pbar = None
         if self.use_tqdm:
             self.pbar = tqdm(total=product(self.that.index_dims()), dynamic_ncols=True)
+            self.pbar.update(self.start)
         return self
 
     def __next__(self) -> TaskExecutable:
@@ -164,7 +171,7 @@ class Task:
         if key is None:
             key = self._create_fake_key(self.FakeKey.FIXED)
         if not isinstance(value, (str, int, float, bool)):
-            raise TypeError(f"value {value} should be str")
+            raise TypeError(f"value {value} should be (str, int, float, bool)")
         self.kv[key] = [str(value)]
         return self
 
@@ -182,17 +189,17 @@ class Task:
         key = self._create_fake_key(self.FakeKey.SWITCH)
         return self.arg(key, [value, ""])
     
-    def index_loop(self):
-        return MultiRange(self.index_dims())
+    def index_loop(self, start = 0):
+        return MultiRange(self.index_dims(), start=start)
     
-    def cmd_loop(self):
-        return MultiRange(self.index_dims(), lambda idx: self.arg_list(idx))
+    def cmd_loop(self, start = 0):
+        return MultiRange(self.index_dims(), lambda idx: self.arg_list(idx), start)
     
-    def cmd_kv_loop(self):
-        return MultiRange(self.index_dims(), lambda idx: self.arg_dict(idx))
+    def cmd_kv_loop(self, start = 0):
+        return MultiRange(self.index_dims(), lambda idx: self.arg_dict(idx), start)
     
-    def executable_loop(self, use_tqdm: bool, env: dict[str, str] = None):
-        return TaskIterator(self, use_tqdm, env)
+    def executable_loop(self, start = 0, use_tqdm = True, env: dict[str, str] = None):
+        return TaskIterator(self, use_tqdm, start, env)
     
     def index_1d(self, multi_index):
         return index_1d(multi_index, self.index_dims())
