@@ -234,3 +234,10 @@ class Task:
                 command_list.extend([key, value])
         return command_list
 
+    def wraps(self, outer_cmd: str):
+        """
+        Wraps the task into the outer command, e.g. debugger, profiler, etc.
+        """
+        outer_cmd_list = shlex.split(outer_cmd)
+        outer_cmd_list.extend(self.program)
+        self.program = outer_cmd_list
