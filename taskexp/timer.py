@@ -3,9 +3,10 @@ import json
 
 
 class TimeRecord:
-    def __init__(self, start: float, name=None):
+    def __init__(self, start: float, name=None, metadata: dict = None):
         self.name = name or "unamed"
         self.start = start
+        self.metadata = metadata
         self.end: float = 0
         self.childs = []
         self.parent = None
@@ -37,6 +38,7 @@ class TimeRecord:
             "start": self.start,
             "end": self.end,
             "duration": self.duration,
+            "metadata": self.metadata,
             "childs": [child.to_dict() for child in self.childs]
         }
     
@@ -57,8 +59,10 @@ class TimeRecord:
                 "name": obj.name,
                 "start": obj.start,
                 "end": obj.end,
-                "duration": obj.duration
+                "duration": obj.duration,
             })
+            if obj.metadata is not None:
+                ret[-1].update(obj.metadata)
         return ret
 
 
@@ -68,11 +72,11 @@ class Timer:
         self.runnings = []
         self.counter = 0
 
-    def start(self, name: str = None):
+    def start(self, name: str = None, metadata = None):
         if name is None:
             name = f"#{self.counter}"
-        self.counter += 1
-        cur = TimeRecord(start=time.time(), name=name)
+            self.counter += 1
+        cur = TimeRecord(start=time.time(), name=name, metadata=metadata)
         self.runnings.append(cur)
         if len(self.runnings) == 1:
             self.records.append(cur)
@@ -108,7 +112,7 @@ class Timer:
 
 if __name__ == "__main__":
     timer = Timer()
-    timer.start("Outer")
+    timer.start("Outer", metadata={"key": "value"})
     time.sleep(0.1)
     timer.start("Inner")
     time.sleep(0.2)
@@ -119,4 +123,3 @@ if __name__ == "__main__":
     timer.stop()
     print(timer.to_json())
     print(timer.flatten())
-    print(timer.records[0].to_json())
