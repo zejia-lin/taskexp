@@ -10,3 +10,9 @@ __all__ = [
     "SubprocessRunner",
     "Timer"
 ]
+
+
+_global_timer_singleton = Timer()
+
+def getTimer():
+    return _global_timer_singleton
