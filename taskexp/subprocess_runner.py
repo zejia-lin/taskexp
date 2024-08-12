@@ -43,6 +43,7 @@ class SubprocessRunner:
 
     @catch_all
     def run(self):
+        """Run the subprocess and return the start and end time of the process."""
         process = subprocess.Popen(self.cmd, env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
         start_time = datetime.now()

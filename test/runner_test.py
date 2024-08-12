@@ -13,11 +13,11 @@ task.switch("--enable")
 logfile = create_log_fd("test_logger", "../build")
 
 
-for t in task.executable_loop(False):
+for t in task.executable_loop():
     # pass
     t.execute(ostreams=[logfile])
     # t.print_cmd(ostreams=[logfile])
     # t.print_duration(ostreams=[logfile])
     # t.print_status(ostreams=[logfile])
     # logfile.flush()
-    # t.update_tqdm()
+    t.update_tqdm()

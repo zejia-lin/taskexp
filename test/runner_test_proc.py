@@ -8,10 +8,10 @@ import os
 
 # print(sys.argv)
 
-# pbar = tqdm(total=20, dynamic_ncols=True)
+pbar = tqdm(total=20, dynamic_ncols=True)
 
-# for i in range(20):
-#     pbar.update(1)
-#     print("asdfasfsdf asdfdsf ")
-#     time.sleep(0.01)
+for i in range(20):
+    pbar.update(1)
+    print("asdfasfsdf asdfdsf ")
+    time.sleep(0.01)
 

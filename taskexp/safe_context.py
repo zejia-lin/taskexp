@@ -1,45 +1,34 @@
 import signal
-import time
-import threading
+import sys
 from functools import wraps
 import traceback
-import sys
 
-_exit_event = threading.Event()
-_confirm_exit = threading.Event()
 
-def _handle_interrupt(signum, frame):
-    print("\nInterrupt received. Do you want to exit? (yes/no): ", end='', flush=True)
-    _confirm_exit.set()
+def ask_exit():
+    try:
+        response = input("\nDo you really want to exit? (y/n): ")
+    except EOFError:
+        return False
+    return response.lower() == "y"
 
-def _input_thread():
-    while not _exit_event.is_set():
-        if _confirm_exit.is_set():
-            response = input()
-            if response.lower() in ('yes'):
-                print("Exiting program...")
-                _exit_event.set()
-            elif response.lower() in ('no'):
-                print("Continuing program...")
-            else:
-                print("Please enter 'yes' or 'no': ", end='', flush=True)
-            _confirm_exit.clear()
 
-# Set up the signal handler
-signal.signal(signal.SIGINT, _handle_interrupt)
-
-# Start the input thread
-threading.Thread(target=_input_thread, daemon=True).start()
+def signal_handler(sig, frame):
+    if ask_exit():
+        print("Exiting...")
+        sys.exit(127)
+    else:
+        print("Continuing...")
 
 
 def nointerrupt(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
-        while not _exit_event.is_set():
-            try:
-                return func(*args, **kwargs)
-            except KeyboardInterrupt:
-                pass
+        original_handler = signal.getsignal(signal.SIGINT)
+        signal.signal(signal.SIGINT, signal_handler)
+        try:
+            return func(*args, **kwargs)
+        finally:
+            signal.signal(signal.SIGINT, original_handler)
     return wrapper
 
 
