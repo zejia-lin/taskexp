@@ -9,7 +9,7 @@ from enum import Enum
 from typing import Any, Optional, Callable, IO, Union, Literal
 import traceback
 
-from .safe_context import catch_all
+from .safe_context import catch_except
 from .subprocess_runner import SubprocessRunner
 
 
@@ -93,7 +93,7 @@ class TaskExecutable:
         self.start_time = None
         self.end_time = None
     
-    @catch_all
+    @catch_except
     def execute(self, timeout: float = 300,  ostreams: list[IO] = [sys.stdout], 
                 on_verbose: Callable[[str, IO, datetime], None] = None):
         self.runner = SubprocessRunner(cmd=self.arg_list, timeout=timeout, ostreams=ostreams,
@@ -102,17 +102,17 @@ class TaskExecutable:
         self.runner.run()
         self.end_time = datetime.now()
     
-    @catch_all
+    @catch_except
     def print_cmd(self, ostreams: list[IO] = [sys.stdout]):
         for fout in ostreams:
             print(' '.join(self.arg_list), file=fout)
 
-    @catch_all
+    @catch_except
     def update_tqdm(self):
         if self.pbar:
             self.pbar.update()
     
-    @catch_all
+    @catch_except
     def print_status(self, ostreams: list[IO] = [sys.stdout]):
         if self.current_mulid and self.total_mulid:
             index = index_1d(self.current_mulid, self.total_mulid)
@@ -121,7 +121,7 @@ class TaskExecutable:
             for fout in ostreams:
                 print(info, file=fout)
     
-    @catch_all
+    @catch_except
     def print_duration(self, ostreams: list[IO] = [sys.stdout]):
         for fout in ostreams:
             print(self.end_time - self.start_time, file=fout)

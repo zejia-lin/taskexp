@@ -7,7 +7,7 @@ import select
 from typing import Union, Callable, IO, List
 from functools import wraps
 
-from .safe_context import catch_all
+from .safe_context import catch_except
 
 
 class SubprocessRunner:
@@ -29,7 +29,7 @@ class SubprocessRunner:
         self.all_ios: List[IO] = []
         self.all_stamps: List[datetime] = []
 
-    @catch_all
+    @catch_except
     def _print_internal(self, line: str, rio: IO) -> None:
         now = datetime.now()
         self.all_ios.append(rio)
@@ -41,7 +41,7 @@ class SubprocessRunner:
         if self.on_verbose:
             self.on_verbose(line, rio, now)
 
-    @catch_all
+    @catch_except
     def run(self):
         """Run the subprocess and return the start and end time of the process."""
         process = subprocess.Popen(self.cmd, env=self.env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
